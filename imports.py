@@ -5,6 +5,7 @@ import torchvision
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
 
+import copy
 import os
 import shutil
 
