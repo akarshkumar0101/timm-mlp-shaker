@@ -42,20 +42,24 @@ class DimLayerNorm(nn.LayerNorm):
     """
     This module is simply a layer norm that is applied to an arbritrary dimension rather than the last dimension or all the dimensions.
     """
-    def __init__(self, shape, dim_to_mix=None, elementwise_affine=True):
+    def __init__(self, shape, dim_to_mix=None, eps=1e-5, elementwise_affine=True):
         self.input_shape = list(shape)
         self.normalized_shape = [1 for l in self.input_shape]
         self.normalized_shape[dim_to_mix] = self.input_shape[dim_to_mix]
         super().__init__(self.normalized_shape, elementwise_affine=elementwise_affine)
         
         self.dim_to_mix = dim_to_mix 
+        self.eps = eps
         
         self.n_dims_from_right = len(self.input_shape)-self.dim_to_mix-1
         
     def forward(self, x):
         assert list(x.shape[-len(self.input_shape):])==self.input_shape, 'input shape not correct'
         dim = -self.n_dims_from_right-1
-        x = (x-x.mean(dim=dim, keepdim=True))/x.std(dim=dim, keepdim=True, unbiased=False)
+        mean = x.mean(dim=dim, keepdim=True)
+        self.eps = 1e-5
+        std = (x.var(dim=dim, keepdim=True, unbiased=False)+self.eps).sqrt()
+        x = (x-mean)/std
         return x*self.weight+self.bias
     
     

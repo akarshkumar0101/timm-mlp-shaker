@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+from einops.layers.torch import Rearrange, Reduce
+
 import copy
 
 import dim_models
@@ -73,34 +75,39 @@ class MLPFlatShaker(nn.Module):
     def forward(self, x):
         bs = x.shape[:len(x.shape)-len(self.input_shape)]
         x = x.reshape(*bs, *self.input_shape)
-        for m in self.mix_dims:
+        for i, m in enumerate(self.mix_dims):
             x = m(x)
         return x
     
 class ViShaker(nn.Module):
     """
-    Maps from (bs, N) to (bs, N)
-    where N = flat_prod(shape).
-    
-    This reshapes N->*dims (for example 100->2,10,5), 
-    then applies linear layers to different dims of this new shape.
-    The dims_to_mix determines which dimensions are mixed in which order.
+    TODO add doc
     """
     def __init__(self, shape, dims_to_mix, target_lengths=None, 
-                 expansion_factor=1, dropout=0., normalize=True, residual=True, 
+                 expansion_factor=1, dropout=0., normalize=True, residual=True,
+                 global_avg_pool_str=None, num_classes=10,
                  verbose=False):
         super().__init__()
         
-        self.to_patch_embedding = nn.Sequential(
-            Rearrange('b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1 = patch_height, p2 = patch_width),
-        #     nn.Linear(patch_dim, dim),
-        )
+#         self.to_patch_embedding = Rearrange('b c (nph psh) (npw psw) -> b (nph npw) (psh psw c)', nph=8, npw=8)
+#         self.to_reshape = Rearrange('b (nph npw) (psh psw c) -> b nph npw psh psw c', nph=8, npw=8)
+#         self.to_reshape = Rearrange('b c (nph psh) (npw psw) -> b nph npw psh psw c', nph=8, npw=8)
+        self.to_reshape = Rearrange('b c (nph psh) (npw psw) -> b (nph npw) (psh psw c)', nph=8, npw=8)
         
-        self.shaker = MLPFlatShaker(shape, dims_to_mix, target_lengths=None, 
-                                    expansion_factor=1, dropout=0., normalize=True, residual=True,
-                                    verbose=False)
+        self.shaker = MLPFlatShaker(shape, dims_to_mix, target_lengths=target_lengths, 
+                                    expansion_factor=expansion_factor, dropout=dropout,
+                                    normalize=normalize, residual=residual,
+                                    verbose=verbose)
+        
+        self.global_avg_pool = Reduce(global_avg_pool_str, 'mean')
+        
+        self.classification_head = nn.Linear(48, num_classes)
         
     def forward(self, x):
-        x = self.to_patch_embedding(x)
+#         x = self.to_patch_embedding(x)
+        x = self.to_reshape(x)
         x = self.shaker(x)
-        return x
+        x = self.global_avg_pool(x)
+        x = x.reshape(x.shape[0], -1)
+        x = self.classification_head(x)
+        return x.log_softmax(dim=-1)
