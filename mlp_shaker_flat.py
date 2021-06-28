@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn
 
@@ -6,6 +7,7 @@ from einops.layers.torch import Rearrange, Reduce
 import copy
 
 import dim_models
+import util
 
 def FeedForward(in_features, out_features=None, bias=True, shape=None, dim_to_mix=None, 
                 expansion_factor=2, dropout=0.):
@@ -73,10 +75,11 @@ class MLPFlatShaker(nn.Module):
         self.output_shape = copy.copy(fshape)
         
     def forward(self, x):
-        bs = x.shape[:len(x.shape)-len(self.input_shape)]
+        bs, is_ = util.bs_is_split(x.shape, np.prod(self.input_shape, dtype=int))
         x = x.reshape(*bs, *self.input_shape)
         for i, m in enumerate(self.mix_dims):
             x = m(x)
+        x = x.reshape(*bs, *is_)
         return x
     
 class ViShaker(nn.Module):
@@ -89,9 +92,6 @@ class ViShaker(nn.Module):
                  verbose=False):
         super().__init__()
         
-#         self.to_patch_embedding = Rearrange('b c (nph psh) (npw psw) -> b (nph npw) (psh psw c)', nph=8, npw=8)
-#         self.to_reshape = Rearrange('b (nph npw) (psh psw c) -> b nph npw psh psw c', nph=8, npw=8)
-#         self.to_reshape = Rearrange('b c (nph psh) (npw psw) -> b nph npw psh psw c', nph=8, npw=8)
         self.to_reshape = Rearrange('b c (nph psh) (npw psw) -> b (nph npw) (psh psw c)', nph=8, npw=8)
         
         self.shaker = MLPFlatShaker(shape, dims_to_mix, target_lengths=target_lengths, 
