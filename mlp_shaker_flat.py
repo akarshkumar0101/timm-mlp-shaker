@@ -86,7 +86,7 @@ class ViShaker(nn.Module):
     """
     TODO add doc
     """
-    def __init__(self, shape, dims_to_mix, target_lengths=None, 
+    def __init__(self, shape, dims_to_mix, target_lengths=None,
                  expansion_factor=1, dropout=0., normalize=True, residual=True,
                  global_avg_pool_str=None, num_classes=10,
                  verbose=False):
@@ -111,3 +111,39 @@ class ViShaker(nn.Module):
         x = x.reshape(x.shape[0], -1)
         x = self.classification_head(x)
         return x.log_softmax(dim=-1)
+
+
+def ViMixer(*, image_size, channels, patch_size, dim, depth, num_classes, expansion_factor = 4, dropout = 0.):
+    assert (image_size % patch_size) == 0, 'image must be divisible by patch size'
+    num_patches = (image_size // patch_size) ** 2
+    shape = [num_patches, dim]
+
+    return nn.Sequential(
+        Rearrange('b c (nph psh) (npw psw) -> b (nph npw) (psh psw c)', psh=patch_size, psw=patch_size),
+        nn.Linear((patch_size ** 2) * channels, dim),
+        MLPFlatShaker(shape, [0, 1]*depth, target_lengths=None,
+                      expansion_factor=expansion_factor, dropout=dropout,
+                      normalize=True, residual=True, verbose=False),
+        nn.LayerNorm(dim),
+        Reduce('b n c -> b c', 'mean'),
+        nn.Linear(dim, num_classes),
+        nn.LogSoftmax(dim=-1)
+    )
+
+def ViShaker(*, image_size, channels, patch_size, dim, depth, num_classes, expansion_factor = 4, dropout = 0.):
+    assert (image_size % patch_size) == 0, 'image must be divisible by patch size'
+    num_patches = (image_size // patch_size) ** 2
+    shape = [image_size//patch_size, image_size//patch_size, patch_size, patch_size, channels]
+
+    return nn.Sequential(
+        Rearrange('b c (nph psh) (npw psw) -> b (nph npw) (psh psw c)', psh=patch_size, psw=patch_size),
+        nn.Linear((patch_size ** 2) * channels, dim),
+        MLPFlatShaker(shape, [0, 1, 2, 3, 4]*depth, target_lengths=None,
+                      expansion_factor=expansion_factor, dropout=dropout,
+                      normalize=True, residual=True, verbose=False),
+        nn.LayerNorm(dim),
+        Reduce('b n c -> b c', 'mean'),
+        nn.Linear(dim, num_classes),
+        nn.LogSoftmax(dim=-1)
+    )
+
