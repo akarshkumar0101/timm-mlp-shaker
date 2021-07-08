@@ -1,3 +1,5 @@
+import scipy
+import scipy.stats
 import numpy as np
 import torch
 import torchvision

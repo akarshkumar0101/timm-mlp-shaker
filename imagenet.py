@@ -20,9 +20,9 @@ class ImageNetN(torch.utils.data.Dataset):
             self.class_idxs = np.random.permutation(len(self.ds.classes))[:n_classes]
             
         self.classes = np.array([i[0] for i in self.ds.classes])[self.class_idxs]
-        idx_new2old = self.class_idxs
-        idx_old2new = {e: idx for idx, e in enumerate(self.class_idxs)}
-        self.imgs = [(x, idx_old2new[y]) for x, y in self.ds.imgs if y in self.class_idxs]
+        self.idx_new2old = self.class_idxs
+        self.idx_old2new = {e: idx for idx, e in enumerate(self.class_idxs)}
+        self.imgs = [(x, self.idx_old2new[y]) for x, y in self.ds.imgs if y in self.class_idxs]
     
     def __len__(self):
         return len(self.imgs)
