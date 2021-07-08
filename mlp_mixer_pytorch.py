@@ -42,23 +42,23 @@ def MLPMixer(*, image_size, channels, patch_size, dim, depth, num_classes, expan
         nn.LogSoftmax(dim=-1)
     )
 
-# class HeadlessMLPMixer(nn.Module):
-#     def __init__(self, len_a, len_b, depth, expansion_factor=4, dropout=0.):
-#         super().__init__()
-#         chan_first, chan_last = partial(nn.Conv1d, kernel_size = 1), nn.Linear
+class HeadlessMLPMixer(nn.Module):
+    def __init__(self, len_a, len_b, depth, expansion_factor=4, dropout=0.):
+        super().__init__()
+        chan_first, chan_last = partial(nn.Conv1d, kernel_size = 1), nn.Linear
 
-#         self.input_shape = [len_a, len_b]
+        self.input_shape = [len_a, len_b]
         
-#         self.seq = nn.Sequential(
-#             *[nn.Sequential(
-#                 PreNormResidual(len_b, FeedForward(len_a, expansion_factor, dropout, chan_first)),
-#                 PreNormResidual(len_b, FeedForward(len_b, expansion_factor, dropout, chan_last))
-#             ) for _ in range(depth)],
-#         )
-#     def forward(self, x):
-#         bs, is_ = util.bs_is_split(x.shape, np.prod(self.input_shape, dtype=int))
-#         x = x.reshape(*bs, *self.input_shape)
-#         x = self.seq(x)
-#         x = x.reshape(*bs, *is_)
-#         return x
+        self.seq = nn.Sequential(
+            *[nn.Sequential(
+                PreNormResidual(len_b, FeedForward(len_a, expansion_factor, dropout, chan_first)),
+                PreNormResidual(len_b, FeedForward(len_b, expansion_factor, dropout, chan_last))
+            ) for _ in range(depth)],
+        )
+    def forward(self, x):
+        bs, is_ = util.bs_is_split(x.shape, np.prod(self.input_shape, dtype=int))
+        x = x.reshape(*bs, *self.input_shape)
+        x = self.seq(x)
+        x = x.reshape(*bs, *is_)
+        return x
 
