@@ -39,7 +39,6 @@ def MLPMixer(*, image_size, channels, patch_size, dim, depth, num_classes, expan
         nn.LayerNorm(dim),
         Reduce('b n c -> b c', 'mean'),
         nn.Linear(dim, num_classes),
-        nn.LogSoftmax(dim=-1)
     )
 
 class HeadlessMLPMixer(nn.Module):
