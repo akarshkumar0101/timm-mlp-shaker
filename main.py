@@ -1,5 +1,3 @@
-print('hey')
-
 import torch
 
 print('device count:')
@@ -18,118 +16,70 @@ import shutil
 import math
 
 from torchinfo import summary
-import torch.utils.tensorboard as tb
+from functools import partial
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
 np.random.seed(0)
-torch.manual_seed(10);
+torch.manual_seed(10)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+import wandb
+import train_simple
 
 import util
 
-
-
-
-
-
-
-h, w = 32, 32
-nph, npw = 8, 8
-bs_train, bs_test = 500, 1000
-bs_train, bs_test = 10, 20
-
-transform = torchvision.transforms.Compose([
-    torchvision.transforms.ToTensor(),
-    torchvision.transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
-#     torchvision.transforms.Resize((h, w), ), 
-#     Rearrange('c (nph psh) (npw psw) -> (nph npw) (psh psw c)', nph=8, npw=8),
+bs_train, bs_test = 512, 1024
+work_dir = os.environ['WORK']
+transform = transforms.Compose([
+#     transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
 ])
-ds_train = torchvision.datasets.CIFAR10('~/datasets/cifar10/', train=True, download=True, transform=transform)
-ds_test = torchvision.datasets.CIFAR10('~/datasets/cifar10/', train=False, download=True, transform=transform)
-dl_train = torch.utils.data.DataLoader(ds_train, batch_size=bs_train, shuffle=True,)
-dl_test = torch.utils.data.DataLoader(ds_test, batch_size=bs_test, shuffle=True,)
-labels = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 
-
-
-loss_fn = nn.NLLLoss()
-def evaluate_model(net, dl=None, n_batches=-1, tqdm=tqdm, device=None, verbose=False):
-    net = net.to(device)
-    n_correct, total = 0, 0
-    loss_total = 0
-    n_examples = 0
-    loop = enumerate(dl)
-    if tqdm is not None:
-        loop = tqdm(loop, leave=False, total=max(n_batches, len(dl)))
-    for batch_idx, (X_batch, Y_batch) in loop:
-        X_batch, Y_batch = X_batch.to(device), Y_batch.to(device)
-        if batch_idx == n_batches:
-            break
-        with torch.no_grad():
-            Y_batch_pred = net(X_batch)
-        n_correct += (Y_batch_pred.argmax(dim=-1)==Y_batch).sum().item()
-        loss = loss_fn(Y_batch_pred, Y_batch).item()
-        loss_total += loss * len(X_batch)
-        n_examples += len(X_batch)
-        total += len(Y_batch)
-    loss_total /= n_examples
-    accuracy = n_correct/total*100.
-    if verbose:
-        print(f'Average Loss: {loss_total:.03f}, Accuracy: {accuracy:.03f}%')
-    return {'loss': loss_total, 'accuracy': accuracy}
-    
-def train_classification_model(net, dl, n_epochs=10, device=None):
-    net = net.to(device)
-    opt = torch.optim.Adam(net.parameters(), lr=1e-3, )
-    
-    for epoch_idx in tqdm(range(n_epochs)):
-        print(f'Starting epoch {epoch_idx}')
-        loop = enumerate(dl)
-        if tqdm is not None:
-            loop = tqdm(loop, leave=False, total=len(dl))
-        for batch_idx, (X_batch, Y_batch) in loop:
-            X_batch, Y_batch = X_batch.to(device), Y_batch.to(device)
-            Y_batch_pred = net(X_batch)
-
-            loss = loss_fn(Y_batch_pred, Y_batch)
-
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-        evaluate_model(net, dl_test, device='cuda', verbose=True)
-    
-
-
-
+ds_train = torchvision.datasets.CIFAR10(f'{work_dir}/datasets/cifar10', train=True, transform=transform)
+ds_test = torchvision.datasets.CIFAR10(f'{work_dir}/datasets/cifar10', train=False, transform=transform)
+# ds_train = torchvision.datasets.ImageNet(f'{work_dir}/datasets/imagenet', split='train', transform=transform)
+dl_train = DataLoader(ds_train, batch_size=bs_train, shuffle=True, num_workers=16)
+dl_test = DataLoader(ds_test, batch_size=bs_test, shuffle=True, num_workers=16)
+n_classes = len(ds_train.classes)
+bs, c, h, w = input_shape = next(iter(dl_train))[0].shape
 
 import mlp_shaker_flat
-import mlp_mixer_pytorch
+# import mlp_mixer_pytorch
 import torchinfo
 
+# net = mlp_shaker_flat.ViShaker(image_size=32, channels=3, patch_size=4, 
+#                               dim=4*4*3, depth=15, num_classes=n_classes, 
+#                               expansion_factor=4.0, dropout=0.0)
+# net = mlp_shaker_flat.ViMixer(image_size=32, channels=3, patch_size=4, 
+#                               dim=4*4*3, depth=15, num_classes=n_classes, 
+#                               expansion_factor=4.0, dropout=0.0)
 
 
-#net = mlp_mixer_pytorch.MLPMixer(image_size=32, channels=3, patch_size=4, dim=48, depth=10, num_classes=10, expansion_factor=4, dropout=0.0)
-#net(torch.randn(100, 3, 32, 32)).shape
-#
-#print('MLP MIXER')
-#evaluate_model(net, dl=dl_test, verbose=True, device=device)
-#train_classification_model(net, dl=dl_train, n_epochs=5, device=device)
-#evaluate_model(net, dl=dl_test, verbose=True, device=device)
+device = 'cuda:3'
+models = {'mixer': mlp_shaker_flat.ViMixer, 'shaker': mlp_shaker_flat.ViShaker}
+for model_name, model in tqdm(models.items(), leave=False):
+    for depth in tqdm([1, 4, 16, 32], leave=False):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        net = model(image_size=32, channels=3, patch_size=4, 
+                    dim=4*4*3, depth=depth, num_classes=n_classes, 
+                    expansion_factor=4.0, dropout=0.0)
+        wandb.init(name=f'{model_name}_{depth:03d}')
+        n_params = util.count_params(net)
+        print(f'Training: {model_name} with depth: {depth} # params: {n_params}')
+        
+        lr = 1e-2
+        config = {}
+        config['model'] = copy.deepcopy(model_name)
+        config['depth'] = copy.deepcopy(depth)
+        config['lr'] = copy.deepcopy(lr)
+        config['n_params'] = n_params
 
-
-print('starting')
-net = mlp_shaker_flat.ViMixer(image_size=32, channels=3, patch_size=4, dim=48, depth=10, num_classes=10, expansion_factor=4, dropout=0.0)
-net(torch.randn(100, 3, 32, 32)).shape
-
-evaluate_model(net, dl=dl_test, verbose=True, device=device)
-train_classification_model(net, dl=dl_train, n_epochs=5, device=device)
-evaluate_model(net, dl=dl_test, verbose=True, device=device)
-print('ending')
-
-
-#for depth in [10, 20, 40]:
-#    net = mlp_shaker_flat.ViShaker(image_size=32, channels=3, patch_size=4, dim=48, depth=depth, num_classes=10, expansion_factor=4, dropout=0.0)
-#    net(torch.randn(100, 3, 32, 32)).shape
-#
-#    evaluate_model(net, dl=dl_test, verbose=True, device=device)
-#    train_classification_model(net, dl=dl_train, n_epochs=5, device=device)
-#    evaluate_model(net, dl=dl_test, verbose=True, device=device)
+        train_simple.train_net(net, dl=dl_train, dl_test=dl_test, n_epochs=10, lr=lr, 
+                               device=device, tqdm=partial(tqdm, leave=False))
+        
+        torch.save((config, net.cpu().state_dict()), f'data/{model_name}_{depth}.pth')
+        wandb.finish()

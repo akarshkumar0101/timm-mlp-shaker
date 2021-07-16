@@ -18,12 +18,15 @@ def FeedForward(shape, dim_to_mix, out_features=None,
     shape1 = copy.copy(list(shape))
     shape2 = copy.copy(shape1)
     shape2[dim_to_mix] = n_hidden
+#     return nn.Sequential(
+#         dim_models.DimLinear(shape1, dim_to_mix, out_features=n_hidden, bias=bias),
+#         nn.GELU(),
+#         nn.Dropout(dropout),
+#         dim_models.DimLinear(shape2, dim_to_mix, out_features=out_features, bias=bias),
+#         nn.Dropout(dropout)
+#     )
     return nn.Sequential(
-        dim_models.DimLinear(shape1, dim_to_mix, out_features=n_hidden, bias=bias),
-        nn.GELU(),
-        nn.Dropout(dropout),
-        dim_models.DimLinear(shape2, dim_to_mix, out_features=out_features, bias=bias),
-        nn.Dropout(dropout)
+        dim_models.DimLinear(shape1, dim_to_mix, out_features=out_features, bias=bias),
     )
     
 class PreNormResidual(nn.Module):
