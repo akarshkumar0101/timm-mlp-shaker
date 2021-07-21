@@ -17,7 +17,6 @@ import math
 import torchinfo
 from torchinfo import summary
 # import torch.utils.tensorboard as tb
-import wandb
 
 np.random.seed(0)
 torch.manual_seed(10);
@@ -69,7 +68,6 @@ def train_net(net, dl, dl_test=None,
               tqdm=None, verbose=True):
     net = net.to(device)
     opt = torch.optim.Adam(net.parameters(), lr=lr)
-    wandb.watch(net)
     
     losses_batches = np.zeros((n_epochs, len(dl)))
     losses_train = np.zeros((n_epochs,))
@@ -81,7 +79,8 @@ def train_net(net, dl, dl_test=None,
         
     if dl_test is not None:
         data = evaluate_net(net, dl_test, tqdm=tqdm, device=device, verbose=verbose)
-        wandb.log({'test_loss': data['loss'], 'test_accuracy': data['accuracy']})
+        print(data)
+#         wandb.log({'test_loss': data['loss'], 'test_accuracy': data['accuracy']})
     
     for epoch_idx in loop1:
         lossm, accm = AverageMeter(), AverageMeter()
@@ -101,11 +100,7 @@ def train_net(net, dl, dl_test=None,
             
             lossm.update(loss.item(), n=len(X_batch))
             accm.update(acc, n=len(X_batch))
-            wandb.log({'batch_loss': loss.item(), 'batch_accuracy': acc})
-#             losses_train[epoch_idx, batch_idx] = loss.item()
             if tqdm is not None: loop1.set_postfix({'loss':loss.item()})
-        wandb.log({'train_loss': lossm.avg, 'train_accuracy': accm.avg})
         if dl_test is not None:
             data = evaluate_net(net, dl_test, tqdm=tqdm, device=device, verbose=verbose)
-            wandb.log({'test_loss': data['loss'], 'test_accuracy': data['accuracy']})
-#     return losses_train, losses_test
+            print(data)
