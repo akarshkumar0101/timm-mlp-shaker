@@ -1,3 +1,8 @@
+# mlp-shaker
+Code for MLP-Shaker, an extension on MLP-Mixer
+
+
+
 # PyTorch Image Models
 - [Sponsors](#sponsors)
 - [What's New](#whats-new)
